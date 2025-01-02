@@ -11,26 +11,28 @@ class DataPrep:
         df = (
             self.data
             .filter(
-                (pl.col("id_order").str.lengths() > 0) & 
-                (pl.col("action").str.lengths() > 0)
+                (pl.col("id_order").str.len_chars() > 0) & 
+                (pl.col("action").str.len_chars() > 0)
             )
             .select(pl.exclude("curr_rate"))
         )
+        print(df)
         df_costs = (
             self.data
             .filter(
-                (pl.col("id_order").str.lengths() > 0) &
-                (pl.col("action").str.lengths() == 0) & 
+                (pl.col("id_order").str.len_chars() > 0) &
+                (pl.col("action").str.len_chars().is_null()) & 
                 (pl.col("desc").str.contains("Divisa")).not_()
             )
             .group_by("id_order")
             .agg(pl.col("var").sum().alias("commision"))
         )
+        print(df_costs)
         df_curr_rate = (
             self.data
             .filter(
                 (pl.col("curr_rate").is_not_null()) &
-                (pl.col("id_order").str.lengths() > 0)
+                (pl.col("id_order").str.len_chars() > 0)
             )
             .select(
                 "id_order", "curr_rate"
@@ -43,8 +45,8 @@ class DataPrep:
         df = (
             self.data
             .filter(
-                (pl.col("action").str.lengths() > 0) & 
-                (pl.col("id_order").str.lengths() == 0)
+                (pl.col("action").str.len_chars() > 0) & 
+                (pl.col("id_order").str.len_chars() == 0)
             )
             .with_columns(pl.lit(None).alias("commision").cast(pl.Float32, strict=False))
             .with_columns(pl.lit(True).alias("unintended"))

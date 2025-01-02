@@ -1,52 +1,22 @@
-[tool.poetry]
-name = "opendeclaro"
+[project]
+name = "opendeclaro-polars"
 version = "0.1.0"
-description = ""
-authors = ["Ignacio Moya <imoyared@gmail.com>"]
+description = "Open source package to compute tax gains from degiro"
 readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=2.0.2",
+    "polars>=1.18.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-polars = "0.20.26"
-numpy = "^1.25.2"
-fastapi = "^0.104.1"
-uvicorn = {extras = ["standard"], version = "^0.24.0.post1"}
-python-multipart = "^0.0.6"
-jinja2 = "^3.1.2"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^5.2"
-
-[tool.poetry.group.dev.dependencies]
-black = "^23.9.1"
-isort = "^5.12.0"
-commitizen = "^3.8.2"
-flake8 = "^6.1.0"
-pre-commit = "^3.4.0"
-jupyterlab = "^4.0.5"
-jupyter-black = "^0.3.4"
-jupyter-lsp = "^2.2.0"
-pandas = "^2.2.2"
-
-[tool.black]
-line-length = 120 
-exclude = '''
-/(
-    \.git
-  | \.mypy_cache
-  | \.tox
-  | venv
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black" 
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "black>=24.10.0",
+    "commitizen>=4.1.0",
+    "flake8>=7.1.1",
+    "isort>=5.13.2",
+    "jupyter-black>=0.4.0",
+    "jupyter-lsp>=2.2.5",
+    "jupyterlab>=4.3.4",
+    "pre-commit>=4.0.1",
+]

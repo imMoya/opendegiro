@@ -17,7 +17,7 @@ class Dataset:
             path location of dataset csv
         """
         self.data = pl.scan_csv(path)
-        self.data_cols = dict(zip(config.cols_list, self.data.columns))
+        self.data_cols = dict(zip(config.cols_list, self.data.collect_schema().names()))
         self.data = self.create_combined_date()
         self.data = self.type_converter()
         self.data = self.split_description()
@@ -30,7 +30,7 @@ class Dataset:
         self.data = self.category_addition()
         # Change dtype and drop duplicates to avoid same transaction duplicated
         self.data = self.replace_str_null(self.data)
-        self.data = self.change_curr_rate_dtype()
+        #self.data = self.change_curr_rate_dtype()
         self.data = self.data.unique().sort("date", descending=True)
 
     @property
@@ -66,11 +66,11 @@ class Dataset:
             pl.col(self.data_cols["product"]),
             pl.col(self.data_cols["isin"]),
             pl.col(self.data_cols["desc"]),
-            pl.col(self.data_cols["curr_rate"]).cast(pl.String),
+            pl.col(self.data_cols["curr_rate"]).cast(pl.Float32, strict=False),
             pl.col(self.data_cols["varcur"]),
-            pl.col(self.data_cols["var"]).str.replace(",", ".").cast(pl.Float32, strict=False),
+            pl.col(self.data_cols["var"]).cast(pl.Float32, strict=False),
             pl.col(self.data_cols["cashcur"]),
-            pl.col(self.data_cols["cash"]).str.replace(",", ".").cast(pl.Float32, strict=False),
+            pl.col(self.data_cols["cash"]).cast(pl.Float32, strict=False),
             pl.col(self.data_cols["id_order"]),
         )
 
@@ -95,7 +95,7 @@ class Dataset:
         orphan_data = self.replace_null_str(self.data.with_row_count().filter(pl.col("reg_date").is_null()))
         mapping = {i: i - 1 for i in orphan_data.select(pl.col("row_nr")).to_series()}
         list_del = [i for i in orphan_data.select(pl.col("row_nr")).to_series()]
-        orphan_data = orphan_data.with_columns(pl.col("row_nr").map_dict(mapping))
+        orphan_data = orphan_data.with_columns(pl.col("row_nr").replace_strict(mapping, default=None))
         orphan_data = orphan_data.with_columns(pl.col("row_nr").cast(pl.UInt32, strict=False).alias("row_nr"))
         mother_data = self.replace_null_str(self.data.with_row_count().join(orphan_data, on="row_nr", how="left"))
         for col_str in self.data.select(pl.col(pl.Utf8)).columns:
@@ -138,7 +138,7 @@ class Dataset:
                 pl.col("product_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("product"),
                 pl.col("isin_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("isin"),
                 pl.col("desc_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("desc"),
-                pl.col("curr_rate_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("curr_rate"),
+                pl.col("curr_rate_list").map_elements(lambda x: x[0], return_dtype=pl.Float32).alias("curr_rate"),
                 pl.col("varcur_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("varcur"),
                 pl.col("cashcur_list").map_elements(lambda x: x[0], return_dtype=pl.String).alias("cashcur"),
                 pl.lit(action).alias("action"),
@@ -155,8 +155,8 @@ class Dataset:
         )
         rest_of_data = (
             self.data.filter(
-                pl.col("id_order").is_in(unique_buy_id_orders).is_not() | 
-                (pl.col("id_order").is_in(unique_buy_id_orders) & (pl.col("action") != action))
+                pl.col("id_order").is_in(unique_buy_id_orders).not_() | 
+                (pl.col("id_order").is_in(unique_buy_id_orders) & (pl.col("action").is_null()))
             )
         )
         return pl.concat([rest_of_data, unique_buy])
@@ -186,7 +186,7 @@ class Dataset:
         self.data_cols.update(dict(zip(["unintended"], ["unintended"])))
         return self.data.with_columns(
             unintended=pl.when(
-                ((pl.col("action") == "buy") | (pl.col("action") == "sell")) & (pl.col("id_order").str.lengths() == 0)
+                ((pl.col("action") == "buy") | (pl.col("action") == "sell")) & (pl.col("id_order").str.len_chars().is_null())
             )
             .then(True)
             .otherwise(False)
@@ -236,13 +236,26 @@ class Dataset:
     @staticmethod
     def replace_null_str(df: Union[DataFrame, LazyFrame]) -> Union[DataFrame, LazyFrame]:
         return df.with_columns(
-            pl.when(pl.col(pl.Utf8).is_null()).then(pl.lit("")).otherwise(pl.col(pl.Utf8)).keep_name()
+            [
+                pl.when(pl.col(column).is_null())
+                .then(pl.lit(""))
+                .otherwise(pl.col(column))
+                .alias(column)
+                for column in df.columns if df.schema[column] == pl.Utf8
+            ]
         )
 
+    
     @staticmethod
     def replace_str_null(df: Union[DataFrame, LazyFrame]) -> Union[DataFrame, LazyFrame]:
         return df.with_columns(
-            pl.when(pl.col(pl.Utf8) == " ").then(None).otherwise(pl.col(pl.Utf8)).keep_name()  # keep original value
+            [
+                pl.when(pl.col(column).str.strip_chars() == "")
+                .then(None)
+                .otherwise(pl.col(column))
+                .alias(column)
+                for column in df.columns if df.schema[column] == pl.Utf8
+            ]
         )
 
     @staticmethod
